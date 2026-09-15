@@ -170,6 +170,18 @@
     </div>
   </section>
 </main>
+<div id="stopModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:10; align-items:center; justify-content:center;">
+  <div style="background:#fff; padding:20px; border-radius:10px; width:380px; box-shadow:0 8px 30px rgba(0,0,0,.25);">
+    <h3 style="margin-top:0">紧急停排</h3>
+    <div class="muted" style="margin-bottom:8px">批次:<b id="stopBatch" class="mono"></b></div>
+    <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:4px">停排原因</label>
+    <input id="stopReason" value="人工紧急停排" style="width:100%; margin-bottom:12px">
+    <div class="row" style="justify-content:flex-end">
+      <button class="gray" id="btnStopCancel">取消</button>
+      <button class="danger" id="btnStopConfirm">确认停排</button>
+    </div>
+  </div>
+</div>
 <div id="toast"></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -342,11 +354,24 @@ $('btnReplay').onclick = () => doAction(async () => {
 async function doClose(batchNo){
   await doAction(async () => { await api(`/api/discharge/${batchNo}/close`, {method:'POST', body:'{}'}); toast('已关阀 ' + batchNo); });
 }
-async function doStop(batchNo){
-  const reason = prompt('停排原因', '人工紧急停排');
-  if (reason === null) return;
-  await doAction(async () => { await api('/api/discharge/stop', {method:'POST', body: JSON.stringify({batch_no: batchNo, reason})}); toast('已停排 ' + batchNo); });
+let stopTarget = null;
+function doStop(batchNo){
+  stopTarget = batchNo;
+  $('stopBatch').textContent = batchNo;
+  $('stopReason').value = '人工紧急停排';
+  $('stopModal').style.display = 'flex';
+  $('stopReason').focus();
 }
+$('btnStopCancel').onclick = () => { $('stopModal').style.display = 'none'; stopTarget = null; };
+$('btnStopConfirm').onclick = () => doAction(async () => {
+  if (!stopTarget) return;
+  const reason = $('stopReason').value.trim() || '人工紧急停排';
+  await api('/api/discharge/stop', {method:'POST', body: JSON.stringify({batch_no: stopTarget, reason})});
+  $('stopModal').style.display = 'none';
+  toast('已停排 ' + stopTarget);
+  stopTarget = null;
+});
+$('stopReason').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnStopConfirm').click(); });
 $('btnRestock').onclick = () => doAction(async () => {
   await api(`/api/chemicals/${$('restockCode').value}/restock`, {method:'POST', body: JSON.stringify({qty: Number($('restockQty').value)})});
   toast('入库成功');

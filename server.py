@@ -196,6 +196,11 @@ class Handler(BaseHTTPRequestHandler):
                         hit = conn.execute(
                             "SELECT * FROM idempotency_keys WHERE key=?", (idem_key,)).fetchone()
                         if hit:
+                            endpoint = f"{method} {path}"
+                            if hit["endpoint"] != endpoint:
+                                # 同键只能约束同一操作:跨操作/跨单据复用 → 拒绝,且不得执行新操作
+                                raise DomainError(409, "幂等键已被用于其他操作,本次请求未执行"
+                                                       "(幂等键只能约束同一操作,不得跨操作复用)")
                             if hit["user_id"] != user["id"] or hit["request_hash"] != domain.request_hash(body):
                                 raise DomainError(409, "幂等键冲突:相同键对应了不同的请求")
                             self._send_json(hit["response_status"], json.loads(hit["response_json"]),

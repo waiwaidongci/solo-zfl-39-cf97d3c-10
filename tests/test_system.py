@@ -441,6 +441,43 @@ class TestIdempotency(WtpTestBase):
         # 清理
         self.c.post(f"/api/discharge/{r1['batch_no']}/close", {}, user="op01")
 
+    def test_key_cannot_cross_operation(self):
+        # 键 K 先用于开阀
+        oid = self.make_rechecked()
+        key = "cross-op-" + str(time.time_ns())
+        body = {"order_id": oid, "outlet_code": "OUT-01", "idempotency_key": key}
+        s1, r1, _ = self.c.post("/api/discharge/open", body, user="op01")
+        self.assertEqual(s1, 201)
+        orders_before = len(self.state()["orders"])
+        # 同一幂等键+同一请求体换到开单操作 → 必须拒绝,不得重放旧结果,也不得执行新操作
+        s2, r2, h2 = self.c.post("/api/dosing-orders", body, user="op01")
+        self.assertEqual(s2, 409)
+        self.assertIn("幂等键", r2["error"])
+        self.assertNotIn("batch_no", r2)                        # 不得返回开阀的旧结果
+        self.assertNotEqual(h2.get("X-Idempotent-Replay"), "true")
+        self.assertEqual(len(self.state()["orders"]), orders_before)  # 开单未被执行
+        # 原操作上的重放仍然有效(键绑定未被破坏)
+        s3, r3, h3 = self.c.post("/api/discharge/open", body, user="op01")
+        self.assertEqual(s3, 201)
+        self.assertEqual(h3.get("X-Idempotent-Replay"), "true")
+        self.assertEqual(r3["batch_no"], r1["batch_no"])
+        self.c.post(f"/api/discharge/{r1['batch_no']}/close", {}, user="op01")
+
+    def test_key_cannot_cross_resource(self):
+        # 同键用于不同单据的投加 → 第二个请求被拒且未执行
+        o1 = self.make_order()
+        o2 = self.make_order()
+        key = "cross-res-" + str(time.time_ns())
+        s1, _, _ = self.c.post(f"/api/dosing-orders/{o1['id']}/dose",
+                               {"idempotency_key": key}, user="op01")
+        self.assertEqual(s1, 200)
+        s2, r2, _ = self.c.post(f"/api/dosing-orders/{o2['id']}/dose",
+                                {"idempotency_key": key}, user="op01")
+        self.assertEqual(s2, 409)
+        self.assertIn("幂等键", r2["error"])
+        _, detail, _ = self.c.get(f"/api/dosing-orders/{o2['id']}", user="admin")
+        self.assertEqual(detail["status"], "CREATED", "第二张单不得被投加")
+
     def test_order_create_idempotent(self):
         key = "idem-order-" + str(time.time_ns())
         body = {"volume_m3": 66, "idempotency_key": key,
@@ -572,6 +609,17 @@ class TestPage(unittest.TestCase):
         self.assertIn("纸坊污水站加药与达标排放系统", html)
         self.assertIn("交接班", html)
         self.assertIn("复检", html)
+
+    def test_page_stop_reason_inline_no_prompt(self):
+        # 回归:紧急停排不得使用 prompt()/confirm()/alert()(内置浏览器不支持),
+        # 停排原因必须在页面内填写
+        with urllib.request.urlopen(self.base + "/", timeout=5) as resp:
+            html = resp.read().decode()
+        for bad in ("prompt(", "confirm(", "alert("):
+            self.assertNotIn(bad, html, f"页面不得使用 {bad}")
+        self.assertIn('id="stopModal"', html)
+        self.assertIn('id="stopReason"', html)
+        self.assertIn('id="btnStopConfirm"', html)
 
     def test_public_info(self):
         with urllib.request.urlopen(self.base + "/api/public-info", timeout=5) as resp:

@@ -37,7 +37,7 @@ python3 -m unittest discover -s tests -v    # 22 个用例
 | 复检不合格自动停排 | 复检事务内:若不合格且存在 OPEN 批次,同事务置批次 `STOPPED`、订单 `STOPPED` | `TestDischargeRules` |
 | 未复核不得开阀 | 仅 `RECHECKED` 状态可开阀,其余 409 | `TestDischargeRules` |
 | 排口同一时刻只能有一个批次 | 部分唯一索引 `ux_open_batch_per_outlet` + 事务内预检 | `TestDischargeRules` |
-| 重复请求返回原结果 | `Idempotency-Key`(请求头或 body)与业务写入同事务落库,重放返回原响应并带 `X-Idempotent-Replay: true`;同键不同体 → 409 | `TestIdempotency` |
+| 重复请求返回原结果 | `Idempotency-Key`(请求头或 body)与业务写入同事务落库,键绑定到具体操作(方法+路径):同键同操作同体重放返回原响应并带 `X-Idempotent-Replay: true`;同键不同体 → 409;跨操作/跨单据复用 → 409 且新操作不执行 | `TestIdempotency` |
 | 并发开阀只能成功一次 | `BEGIN IMMEDIATE` 串行化写事务 + 唯一索引兜底,8 线程并发仅 1 个 201 | `TestConcurrency` |
 | 药耗/库存/水质/排放状态同成功同回滚 | 所有多步写入在单个 `BEGIN IMMEDIATE` 事务内,任一步失败整体 `ROLLBACK` | `test_insufficient_stock_rolls_back_everything` |
 | 越权 | 角色→动作白名单,未登录 401、越权 403 | `TestPermissions` |
