@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>纸坊污水站加药与达标排放系统</title>
+<style>
+  :root { --bg:#eef2f6; --panel:#fff; --ink:#1c2733; --muted:#5d6b7a; --line:#d7e0e8;
+          --accent:#0b6e4f; --accent2:#1355a4; --warn:#b3352b; --amber:#9a6a00; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"PingFang SC","Microsoft YaHei",Arial,sans-serif; }
+  header { background:#0f2c3f; color:#fff; padding:14px 24px; display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  header h1 { font-size:20px; margin:0; }
+  header .sub { color:#9fb8c8; font-size:13px; }
+  #shiftBadge { margin-left:auto; padding:6px 12px; border-radius:6px; background:#1d4a66; font-size:13px; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .b-on { background:#0b6e4f; color:#fff; } .b-off { background:#6b7684; color:#fff; }
+  .b-warn { background:var(--amber); color:#fff; } .b-bad { background:var(--warn); color:#fff; }
+  .b-info { background:var(--accent2); color:#fff; }
+  #userbar { display:flex; gap:8px; align-items:center; background:#fff; padding:10px 24px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  #userbar select,#userbar input { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  button { border:0; border-radius:6px; background:var(--accent); color:#fff; padding:8px 14px; font-weight:700; cursor:pointer; font-size:14px; }
+  button.sec { background:var(--accent2); } button.gray { background:#6b7684; } button.danger { background:var(--warn); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  nav { display:flex; gap:4px; padding:10px 24px 0; }
+  nav button { background:transparent; color:var(--muted); border:1px solid transparent; border-radius:8px 8px 0 0; padding:10px 18px; font-size:15px; }
+  nav button.active { background:var(--panel); color:var(--ink); border-color:var(--line); border-bottom-color:var(--panel); }
+  main { padding:0 24px 40px; }
+  .tab { display:none; background:var(--panel); border:1px solid var(--line); border-radius:0 8px 8px 8px; padding:20px; }
+  .tab.active { display:block; }
+  h2 { margin:0 0 12px; font-size:17px; } h3 { font-size:15px; margin:16px 0 8px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; background:#fff; }
+  th,td { border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; }
+  th { background:#f2f6f9; white-space:nowrap; }
+  input,select { padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  .formgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end; margin-bottom:12px; }
+  .formgrid label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-bottom:14px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:14px; background:#fbfdfe; }
+  .card .big { font-size:24px; font-weight:800; }
+  .muted { color:var(--muted); font-size:12px; }
+  .ok { color:var(--accent); font-weight:700; } .bad { color:var(--warn); font-weight:700; }
+  #toast { position:fixed; right:18px; top:18px; z-index:9; display:grid; gap:8px; max-width:460px; }
+  .toast { padding:12px 16px; border-radius:8px; color:#fff; font-size:14px; box-shadow:0 4px 14px rgba(0,0,0,.2); white-space:pre-line; }
+  .toast.ok { background:var(--accent); } .toast.err { background:var(--warn); }
+  .panelbox { border:1px solid var(--line); border-radius:8px; padding:14px; margin-bottom:14px; background:#fff; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .mono { font-family:ui-monospace,Consolas,monospace; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <div><h1>纸坊污水站加药与达标排放系统</h1><div class="sub">交接班 · 按方投加 · 复检达标 · 排放联锁</div></div>
+  <div id="shiftBadge" class="badge b-off">未加载</div>
+</header>
+<div id="userbar">
+  <span id="who" class="muted">未登录</span>
+  <select id="loginUser"></select>
+  <input id="loginPass" type="password" placeholder="密码" style="width:110px">
+  <button class="sec" id="btnLogin">登录</button>
+  <button class="gray" id="btnLogout">退出</button>
+  <span class="muted" id="loginHint"></span>
+</div>
+<nav>
+  <button data-tab="shift" class="active">交接班</button>
+  <button data-tab="dosing">加药</button>
+  <button data-tab="recheck">复检</button>
+  <button data-tab="discharge">排放</button>
+  <button data-tab="board">看板</button>
+</nav>
+<main>
+  <!-- ================= 交接班 ================= -->
+  <section class="tab active" id="tab-shift">
+    <h2>交接班</h2>
+    <div class="cards" id="shiftCards"></div>
+    <div class="panelbox">
+      <h3>交班(班长)</h3>
+      <div class="row">
+        <input id="handoverNote" placeholder="交接备注(设备/水质/遗留事项)" style="flex:1;min-width:260px">
+        <button id="btnHandover">完成交接</button>
+      </div>
+    </div>
+    <div class="panelbox">
+      <h3>接班(班长) — 上一班组完成交接后才能接班</h3>
+      <div class="formgrid">
+        <div><label>班组</label><input id="takeoverTeam" placeholder="如:乙班"></div>
+        <div><label>班次</label><select id="takeoverName"><option>早班</option><option>中班</option><option>晚班</option></select></div>
+        <div><label>备注</label><input id="takeoverNote" placeholder="接班确认备注"></div>
+        <div><button id="btnTakeover">接班上岗</button></div>
+      </div>
+    </div>
+    <h3>班次记录</h3>
+    <table id="shiftTable"><thead><tr><th>ID</th><th>班组</th><th>班次</th><th>班长</th><th>状态</th><th>上岗时间</th><th>交接时间</th><th>交接备注</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= 加药 ================= -->
+  <section class="tab" id="tab-dosing">
+    <h2>加药开单(按当前批准配方与水质区间计算投加量)</h2>
+    <div class="panelbox">
+      <div class="formgrid">
+        <div><label>进水COD (mg/L, 量程0-1000)</label><input id="inCod" type="number" step="any" placeholder="如 200"></div>
+        <div><label>进水SS (mg/L, 量程0-800)</label><input id="inSs" type="number" step="any" placeholder="如 300"></div>
+        <div><label>进水pH (量程0-14)</label><input id="inPh" type="number" step="any" placeholder="如 7.2"></div>
+        <div><label>进水流量 (m³/h, 量程0-5000)</label><input id="inFlow" type="number" step="any" placeholder="如 120"></div>
+        <div><label>处理水量 (m³)</label><input id="inVol" type="number" step="any" placeholder="如 100"></div>
+        <div><button id="btnCreateOrder">开单并计算投加量</button></div>
+      </div>
+      <div class="muted">指标缺失、格式错误或超出量程 → 整单拒绝。投加量 = 区间投加率(g/m³) × 水量 ÷ 1000。</div>
+    </div>
+    <h3>加药单</h3>
+    <table id="orderTable"><thead><tr><th>单号</th><th>状态</th><th>进水水质</th><th>投加量(配方)</th><th>水量m³</th><th>开单人</th><th>操作</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= 复检 ================= -->
+  <section class="tab" id="tab-recheck">
+    <h2>出水复检(投加人与复检人不能为同一人;不合格自动停排)</h2>
+    <div class="panelbox">
+      <div class="formgrid">
+        <div><label>加药单</label><select id="recheckOrder"></select></div>
+        <div><label>出水COD (mg/L, ≤50达标)</label><input id="outCod" type="number" step="any"></div>
+        <div><label>出水SS (mg/L, ≤10达标)</label><input id="outSs" type="number" step="any"></div>
+        <div><label>出水pH (6-9达标)</label><input id="outPh" type="number" step="any"></div>
+        <div><button class="sec" id="btnRecheck">提交复检</button></div>
+      </div>
+      <div class="muted">出水指标格式错误或超出量程(0-150/0-100/0-14) → 整单拒绝。排放中复检不合格将自动停排。</div>
+    </div>
+    <h3>复检记录</h3>
+    <table id="recheckTable"><thead><tr><th>ID</th><th>加药单</th><th>结果</th><th>复检人</th><th>时间</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= 排放 ================= -->
+  <section class="tab" id="tab-discharge">
+    <h2>达标排放(未复核合格不得开阀;同一排口同一时刻只能有一个批次)</h2>
+    <div class="cards" id="outletCards"></div>
+    <div class="panelbox">
+      <h3>开阀排放</h3>
+      <div class="row">
+        <select id="openOrder"></select>
+        <select id="openOutlet"><option value="OUT-01">OUT-01 总排口</option><option value="OUT-02">OUT-02 旁路排口</option></select>
+        <button id="btnOpen">开阀</button>
+        <button class="gray" id="btnReplay" disabled>重发上次开阀请求(幂等演示)</button>
+      </div>
+      <div class="muted" id="replayInfo"></div>
+    </div>
+    <h3>排放批次</h3>
+    <table id="batchTable"><thead><tr><th>批次号</th><th>排口</th><th>加药单</th><th>状态</th><th>开阀时间</th><th>关阀时间</th><th>停排原因</th><th>操作</th></tr></thead><tbody></tbody></table>
+  </section>
+
+  <!-- ================= 看板 ================= -->
+  <section class="tab" id="tab-board">
+    <h2>看板</h2>
+    <div class="cards" id="chemCards"></div>
+    <div class="panelbox">
+      <h3>当前批准配方 <span id="formulaMeta" class="muted"></span></h3>
+      <table id="formulaTable"><thead><tr><th>药剂</th><th>依据指标</th><th>区间</th><th>投加率(g/m³)</th></tr></thead><tbody></tbody></table>
+      <h3>药耗记录</h3>
+      <table id="consTable"><thead><tr><th>加药单</th><th>药剂</th><th>用量(kg)</th><th>时间</th></tr></thead><tbody></tbody></table>
+      <h3>库存流水</h3>
+      <table id="invTable"><thead><tr><th>药剂</th><th>变动</th><th>原因</th><th>关联单号</th><th>时间</th></tr></thead><tbody></tbody></table>
+      <h3>审计日志</h3>
+      <table id="auditTable"><thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>详情</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="panelbox" id="adminBox" style="display:none">
+      <h3>管理员:药剂入库</h3>
+      <div class="row">
+        <select id="restockCode"><option value="PAC">PAC 聚合氯化铝</option><option value="PAM">PAM 聚丙烯酰胺</option></select>
+        <input id="restockQty" type="number" step="any" placeholder="数量kg" style="width:120px">
+        <button class="sec" id="btnRestock">入库</button>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem('wtp_token') || '';
+let state = null;
+let lastOpenReq = null; // 幂等演示:保存上次开阀请求
+const STATUS_CLASS = {CREATED:'b-info',DOSED:'b-info',RECHECKED:'b-on',DISCHARGING:'b-warn',
+  DISCHARGED:'b-off',FAILED:'b-bad',STOPPED:'b-bad',OPEN:'b-warn',CLOSED:'b-off',STOPPED_B:'b-bad',
+  ON_DUTY:'b-on',HANDED_OVER:'b-warn',CLOSED_S:'b-off',PASS:'b-on',FAIL:'b-bad'};
+
+function toast(msg, ok=true){
+  const el = document.createElement('div');
+  el.className = 'toast ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  $('toast').appendChild(el);
+  setTimeout(() => el.remove(), 6000);
+}
+async function api(path, opts={}){
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(path, {...opts, headers});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok){
+    const detail = (data.errors && data.errors.length) ? '\n' + data.errors.join('\n') : '';
+    throw new Error((data.error || ('HTTP ' + res.status)) + detail);
+  }
+  return {data, replay: res.headers.get('X-Idempotent-Replay') === 'true'};
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtQ = q => `COD ${q.cod} / SS ${q.ss} / pH ${q.ph}` + (q.flow != null ? ` / 流量 ${q.flow}` : '');
+
+async function refresh(){
+  try {
+    const r = await api('/api/state');
+    state = r.data;
+    render();
+  } catch(e){
+    if (String(e.message).includes('未登录')) { /* 未登录时静默 */ }
+  }
+}
+
+function render(){
+  if (!state) return;
+  // 班次徽标
+  const s = state.shift;
+  $('shiftBadge').className = 'badge ' + (s && s.status==='ON_DUTY' ? 'b-on' : s ? 'b-warn' : 'b-off');
+  $('shiftBadge').textContent = s ? `${s.team}/${s.shift_name} · ${s.status==='ON_DUTY'?'在岗':'已交班待接班'} · 班长 ${s.leader_name}` : '当前无在岗班次';
+  // 交接班
+  $('shiftCards').innerHTML = `
+    <div class="card"><div class="muted">当前班次</div><div class="big">${s ? esc(s.team)+' / '+esc(s.shift_name) : '—'}</div>
+      <div class="muted">${s ? '班长 '+esc(s.leader_name)+' · '+esc(s.created_at) : '请班长接班上岗'}</div></div>
+    <div class="card"><div class="muted">状态</div><div class="big">${s ? (s.status==='ON_DUTY'?'在岗可作业':'已交班,等待接班') : '无班次'}</div></div>`;
+  $('shiftTable').querySelector('tbody').innerHTML = state.shifts.map(x => `
+    <tr><td>${x.id}</td><td>${esc(x.team)}</td><td>${esc(x.shift_name)}</td><td>${esc(x.leader_name)}</td>
+    <td><span class="badge ${STATUS_CLASS[x.status]||'b-off'}">${x.status}</span></td>
+    <td class="mono">${esc(x.created_at)}</td><td class="mono">${esc(x.handed_over_at||'')}</td><td>${esc(x.handover_note||'')}</td></tr>`).join('');
+  // 加药单
+  $('orderTable').querySelector('tbody').innerHTML = state.orders.map(o => {
+    const lines = o.lines.map(l => `${l.chemical_code} ${l.amount_kg}kg<br><span class="muted">@${l.dose_rate}g/m³</span>`).join('<br>');
+    const doseBtn = o.status==='CREATED' ? `<button data-dose="${o.id}">执行投加(出库)</button>` : '';
+    return `<tr><td class="mono">${esc(o.order_no)}</td>
+      <td><span class="badge ${STATUS_CLASS[o.status]||'b-off'}">${esc(o.status_label)}</span></td>
+      <td class="muted">见详情</td><td>${lines}</td><td>${o.volume_m3}</td><td>${esc(o.creator)}</td><td>${doseBtn}</td></tr>`;
+  }).join('');
+  document.querySelectorAll('[data-dose]').forEach(b => b.onclick = () => doDose(b.dataset.dose));
+  // 复检下拉:已投加或排放中的单
+  const recheckable = state.orders.filter(o => ['DOSED','DISCHARGING'].includes(o.status));
+  $('recheckOrder').innerHTML = recheckable.length
+    ? recheckable.map(o => `<option value="${o.id}">${esc(o.order_no)} (${esc(o.status_label)})</option>`).join('')
+    : '<option value="">(无可复检单)</option>';
+  $('recheckTable').querySelector('tbody').innerHTML = state.rechecks.map(r => {
+    const o = state.orders.find(x => x.id === r.order_id);
+    return `<tr><td>${r.id}</td><td class="mono">${o ? esc(o.order_no) : r.order_id}</td>
+      <td><span class="badge ${STATUS_CLASS[r.result]}">${r.result==='PASS'?'合格':'不合格'}</span></td>
+      <td>${esc(r.inspector)}</td><td class="mono">${esc(r.created_at)}</td></tr>`;
+  }).join('');
+  // 排放
+  $('outletCards').innerHTML = state.outlets.map(o => `
+    <div class="card"><div class="muted">${esc(o.code)} · ${esc(o.name)}</div>
+      <div class="big">${o.open_batch ? '排放中' : '空闲'}</div>
+      <div class="muted">${o.open_batch ? '批次 '+esc(o.open_batch.batch_no)+' · '+esc(o.open_batch.opened_at) : '可开阀'}</div></div>`).join('');
+  const rechecked = state.orders.filter(o => o.status==='RECHECKED');
+  $('openOrder').innerHTML = rechecked.length
+    ? rechecked.map(o => `<option value="${o.id}">${esc(o.order_no)} (复检合格)</option>`).join('')
+    : '<option value="">(无复检合格单)</option>';
+  $('batchTable').querySelector('tbody').innerHTML = state.batches.map(b => {
+    const o = state.orders.find(x => x.id === b.order_id);
+    const cls = b.status==='OPEN' ? 'b-warn' : b.status==='CLOSED' ? 'b-off' : 'b-bad';
+    const ops = b.status==='OPEN'
+      ? `<button class="sec" data-close="${esc(b.batch_no)}">关阀</button>
+         <button class="danger" data-stop="${esc(b.batch_no)}">紧急停排</button>` : '';
+    return `<tr><td class="mono">${esc(b.batch_no)}</td><td>${esc(b.outlet_code)}</td>
+      <td class="mono">${o ? esc(o.order_no) : b.order_id}</td>
+      <td><span class="badge ${cls}">${b.status}</span></td>
+      <td class="mono">${esc(b.opened_at)}</td><td class="mono">${esc(b.closed_at||'')}</td>
+      <td>${esc(b.stop_reason||'')}</td><td>${ops}</td></tr>`;
+  }).join('');
+  document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => doClose(b.dataset.close));
+  document.querySelectorAll('[data-stop]').forEach(b => b.onclick = () => doStop(b.dataset.stop));
+  // 看板
+  $('chemCards').innerHTML = state.chemicals.map(c => `
+    <div class="card"><div class="muted">${esc(c.code)} · ${esc(c.name)}</div>
+      <div class="big">${c.stock_qty} <span style="font-size:14px">${esc(c.unit)}</span></div></div>`).join('');
+  $('formulaMeta').textContent = state.formula ? `${state.formula.name} ${state.formula.version}` : '无已批准配方';
+  $('formulaTable').querySelector('tbody').innerHTML = state.formula_lines.map(l => `
+    <tr><td>${esc(l.chemical_code)}</td><td>${l.param==='cod'?'进水COD':'进水SS'}</td>
+    <td>[${l.low}, ${l.high>=1000000?'∞':l.high})</td><td>${l.dose_rate}</td></tr>`).join('');
+  $('consTable').querySelector('tbody').innerHTML = state.consumptions.map(c => `
+    <tr><td class="mono">${esc(c.order_no)}</td><td>${esc(c.chemical_code)}</td><td>${c.qty}</td><td class="mono">${esc(c.created_at)}</td></tr>`).join('');
+  $('invTable').querySelector('tbody').innerHTML = state.inventory_txn.map(t => `
+    <tr><td>${esc(t.chemical_code)}</td><td class="${t.delta<0?'bad':'ok'}">${t.delta>0?'+':''}${t.delta}</td>
+    <td>${esc(t.reason)}</td><td class="mono">${esc(t.ref||'')}</td><td class="mono">${esc(t.created_at)}</td></tr>`).join('');
+  $('auditTable').querySelector('tbody').innerHTML = state.audit.map(a => `
+    <tr><td class="mono">${esc(a.created_at)}</td><td>${esc(a.actor)}</td><td>${esc(a.action)}</td><td>${esc(a.detail)}</td></tr>`).join('');
+}
+
+// ---------------- 动作 ----------------
+async function doAction(fn){
+  try { await fn(); await refresh(); }
+  catch(e){ toast(e.message, false); }
+}
+$('btnLogin').onclick = () => doAction(async () => {
+  const r = await api('/api/login', {method:'POST', body: JSON.stringify({username:$('loginUser').value, password:$('loginPass').value})});
+  token = r.data.token; localStorage.setItem('wtp_token', token);
+  $('who').textContent = `${r.data.user.name} (${r.data.user.username} · ${r.data.user.role})`;
+  $('adminBox').style.display = r.data.user.role==='ADMIN' ? '' : 'none';
+  toast('登录成功: ' + r.data.user.name);
+});
+$('btnLogout').onclick = () => { token=''; localStorage.removeItem('wtp_token'); $('who').textContent='未登录'; toast('已退出'); };
+$('btnHandover').onclick = () => doAction(async () => {
+  await api('/api/shifts/handover', {method:'POST', body: JSON.stringify({note:$('handoverNote').value})});
+  toast('交班完成,等待下一班组接班');
+});
+$('btnTakeover').onclick = () => doAction(async () => {
+  await api('/api/shifts/takeover', {method:'POST', body: JSON.stringify({team:$('takeoverTeam').value, shift_name:$('takeoverName').value, note:$('takeoverNote').value})});
+  toast('接班成功,当前班组在岗');
+});
+$('btnCreateOrder').onclick = () => doAction(async () => {
+  const body = {volume_m3: Number($('inVol').value), influent: {cod:Number($('inCod').value), ss:Number($('inSs').value), ph:Number($('inPh').value), flow:Number($('inFlow').value)}, idempotency_key: crypto.randomUUID()};
+  const r = await api('/api/dosing-orders', {method:'POST', body: JSON.stringify(body)});
+  toast('开单成功 ' + r.data.order_no + ': ' + r.data.lines.map(l=>`${l.chemical_code} ${l.amount_kg}kg`).join(', '));
+});
+async function doDose(id){
+  await doAction(async () => {
+    const r = await api(`/api/dosing-orders/${id}/dose`, {method:'POST', body: JSON.stringify({idempotency_key: crypto.randomUUID()})});
+    toast('投加出库完成 ' + r.data.order_no);
+  });
+}
+$('btnRecheck').onclick = () => doAction(async () => {
+  const id = $('recheckOrder').value;
+  if (!id) throw new Error('无可复检的加药单');
+  const body = {effluent: {cod:Number($('outCod').value), ss:Number($('outSs').value), ph:Number($('outPh').value)}, idempotency_key: crypto.randomUUID()};
+  const r = await api(`/api/dosing-orders/${id}/recheck`, {method:'POST', body: JSON.stringify(body)});
+  toast(r.data.recheck_result==='PASS' ? '复检合格,可开阀排放' : ('复检不合格!' + (r.data.auto_stopped_batch ? ' 已自动停排 '+r.data.auto_stopped_batch : ' 禁止排放')), r.data.recheck_result==='PASS');
+});
+$('btnOpen').onclick = () => doAction(async () => {
+  const id = $('openOrder').value;
+  if (!id) throw new Error('无复检合格的加药单');
+  lastOpenReq = {order_id: Number(id), outlet_code: $('openOutlet').value, idempotency_key: crypto.randomUUID()};
+  const r = await api('/api/discharge/open', {method:'POST', body: JSON.stringify(lastOpenReq)});
+  $('btnReplay').disabled = false;
+  $('replayInfo').textContent = '上次开阀: ' + r.data.batch_no + ' (键 ' + lastOpenReq.idempotency_key.slice(0,8) + '…)';
+  toast('开阀成功,批次 ' + r.data.batch_no);
+});
+$('btnReplay').onclick = () => doAction(async () => {
+  if (!lastOpenReq) return;
+  const r = await api('/api/discharge/open', {method:'POST', body: JSON.stringify(lastOpenReq)});
+  toast((r.replay ? '[幂等重放] ' : '') + '返回原结果: ' + r.data.batch_no);
+});
+async function doClose(batchNo){
+  await doAction(async () => { await api(`/api/discharge/${batchNo}/close`, {method:'POST', body:'{}'}); toast('已关阀 ' + batchNo); });
+}
+async function doStop(batchNo){
+  const reason = prompt('停排原因', '人工紧急停排');
+  if (reason === null) return;
+  await doAction(async () => { await api('/api/discharge/stop', {method:'POST', body: JSON.stringify({batch_no: batchNo, reason})}); toast('已停排 ' + batchNo); });
+}
+$('btnRestock').onclick = () => doAction(async () => {
+  await api(`/api/chemicals/${$('restockCode').value}/restock`, {method:'POST', body: JSON.stringify({qty: Number($('restockQty').value)})});
+  toast('入库成功');
+});
+
+// ---------------- 初始化 ----------------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x===b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-'+b.dataset.tab));
+});
+(async function init(){
+  try {
+    const info = await (await fetch('/api/public-info')).json();
+    $('loginUser').innerHTML = info.users.map(u => `<option value="${esc(u.username)}">${esc(u.name)} (${esc(u.username)} · ${esc(u.role)})</option>`).join('');
+    $('loginHint').textContent = '演示口令均为 ' + info.default_password;
+  } catch(e) {}
+  if (token) {
+    try { const r = await api('/api/state'); state = r.data; $('who').textContent = '已登录(会话已恢复)'; } catch(e) { token=''; localStorage.removeItem('wtp_token'); }
+  }
+  render();
+  setInterval(refresh, 3000);
+  refresh();
+})();
+</script>
+</body>
+</html>
